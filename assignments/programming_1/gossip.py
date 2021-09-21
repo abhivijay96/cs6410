@@ -77,8 +77,20 @@ def add_node_to_list(line):
     port = parts[1]
     if valid_node_entry(line):
         nodes_lock.acquire()
-        nodes[line] = node(ip, int(port), -1, 0)
+        if line not in nodes:
+            nodes[line] = node(ip, int(port), -1, 0)
+            if ip not in ip_to_nodes:
+                ip_to_nodes[ip] = []
+            ip_to_nodes[ip].append(int(port))
         nodes_lock.release()
+
+def remove_node(node_id):
+    parts = node_id.split(':')
+    ip = parts[0]
+    port = parts[1]
+    nodes.pop(node_id, None)
+    # print('Removing', port, 'from', ip_to_nodes[ip])
+    ip_to_nodes[ip].remove(int(port))
 
 def update_node(node_id, update_time, update_digit):
     global digit, my_update_time
@@ -96,20 +108,18 @@ def update_node(node_id, update_time, update_digit):
             parts = node_id.split(':')
             ip = parts[0]
             port = parts[1]
-            if ip not in ip_to_nodes:
-                ip_to_nodes[ip] = [int(port)]
-            ip_to_nodes[ip].append(int(port))
+            
             min_time = get_utc_time_seconds()
             min_node_id = None
-            if ip_to_nodes[ip] > MAX_NODES_FROM_IP:
+            if len(ip_to_nodes[ip]) > MAX_NODES_FROM_IP:
                 for port in ip_to_nodes[ip]:
                     node_id = ip + ":" + str(port)
                     if nodes[node_id].time < min_time:
                         min_time = nodes[node_id].time
                         min_node_id = node_id
             if min_node_id is not None:
-                nodes.pop(min_node_id, None)
-            
+                print('Removed', min_node_id)
+                remove_node(min_node_id)
         nodes_lock.release()
 
 # assumes nodes lock is already acquired
@@ -144,7 +154,7 @@ def contact_node(node_id):
         print(traceback.format_exc())
         black_list.add(node_id)
         nodes_lock.acquire()
-        nodes.pop(node_id, None)
+        remove_node(node_id)
         nodes_lock.release()
 
 # background thread 1: 
@@ -168,7 +178,7 @@ def server():
             strings_to_send.append(get_my_info().encode('utf-8'))
             nodes_lock.release()
             # print('Sending')
-            for string_to_send in string_to_send:
+            for string_to_send in strings_to_send:
                 conn.sendall(string_to_send)
             conn.close()
             # print('Done sending')
