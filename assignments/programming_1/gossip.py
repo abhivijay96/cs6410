@@ -94,15 +94,15 @@ def remove_node(node_id):
 
 def update_node(node_id, update_time, update_digit):
     global digit, my_update_time
-    if update_time <= get_utc_time_seconds():
+    if update_time > 0 and update_time <= get_utc_time_seconds():
         add_node_to_list(node_id)
         nodes_lock.acquire()
         if node_id in nodes:
             nodes[node_id].time = update_time
             nodes[node_id].digit = update_digit
-            if update_time > my_update_time:
-                digit = update_digit  
-                my_update_time = update_time
+            # if update_time > my_update_time:
+            #     digit = update_digit  
+            #     my_update_time = update_time
 
             # Capping the number of nodes from a give IP
             parts = node_id.split(':')
@@ -132,7 +132,7 @@ def contact_node(node_id):
             read_lines = ''
             data = s.recv(4096)
             while data:
-                read_lines += data.decode('utf-8')
+                read_lines += data.decode('ascii')
                 data = s.recv(4096)
             lines = read_lines.splitlines()
             line_count = 0
@@ -145,7 +145,7 @@ def contact_node(node_id):
                     update_digit = parts[2]
                     addr_parts = node_id.split(':')
                     if validate_ip(addr_parts[0]) and validate_port(addr_parts[1]):
-                        update_node(node_id, int(update_time), int(update_digit))  
+                        update_node(node_id, int(float(update_time)), int(float(update_digit)))  
                 line_count += 1
                 if line_count == 256:
                     break          
@@ -165,7 +165,7 @@ def contact_node(node_id):
 #   Print entries while updating        
 def server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('0.0.0.0', PORT))
+        s.bind((get_my_ip(), PORT))
         s.listen()
         while True:
             # print('Waiting....')
@@ -174,10 +174,15 @@ def server():
             strings_to_send = []
             nodes_lock.acquire()
             for node_id in nodes:
-                strings_to_send.append(get_printable_str(node_id, nodes[node_id].time, nodes[node_id].digit).encode('utf-8'))
-            strings_to_send.append(get_my_info().encode('utf-8'))
+                strings_to_send.append(get_printable_str(node_id, nodes[node_id].time, nodes[node_id].digit).encode('ascii'))
+            if my_update_time > 0:
+                strings_to_send.append(get_my_info().encode('ascii'))
             nodes_lock.release()
+            # Adverserial response
+            # strings_to_send = []
+            # strings_to_send.append('127.0.0.1:5000,1000,-1'.encode('ascii'))
             # print('Sending')
+            
             for string_to_send in strings_to_send:
                 conn.sendall(string_to_send)
             conn.close()
